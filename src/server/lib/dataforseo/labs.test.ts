@@ -3,6 +3,7 @@ import { fetchRelatedKeywords } from "./labs";
 
 vi.mock("@/server/lib/runtime-env", () => ({
   getRequiredEnvValue: vi.fn(async () => "test-api-key"),
+  getOptionalEnvValue: vi.fn(async () => undefined),
 }));
 
 afterEach(() => vi.unstubAllGlobals());

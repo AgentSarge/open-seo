@@ -38,7 +38,7 @@ export async function fetchRegistry(
     ) as SerpRegistryLocation[];
   }
   const response = await fetch(
-    `https://api.dataforseo.com/v3/serp/google/locations/${encodeURIComponent(iso)}`,
+    `${process.env.DATAFORSEO_BASE_URL ?? "https://api.dataforseo.com"}/v3/serp/google/locations/${encodeURIComponent(iso)}`,
     {
       headers: { Authorization: `Basic ${requiredEnv("DATAFORSEO_API_KEY")}` },
     },
