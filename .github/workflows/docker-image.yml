@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   docker:
-    if: github.repository == 'every-app/open-seo'
+    # Upstream publishes ghcr.io/every-app/open-seo; the AgentSarge fork
+    # publishes ghcr.io/agentsarge/open-seo (GHCR names must be lowercase).
+    if: github.repository == 'every-app/open-seo' || github.repository == 'AgentSarge/open-seo'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,7 +39,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/every-app/open-seo
+          images: ghcr.io/${{ github.repository == 'AgentSarge/open-seo' && 'agentsarge' || 'every-app' }}/open-seo
           tags: |
             type=ref,event=branch
             type=ref,event=tag

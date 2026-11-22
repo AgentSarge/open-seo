@@ -1,5 +1,8 @@
 import { AppError } from "@/server/lib/errors";
-import { getRequiredEnvValue } from "@/server/lib/runtime-env";
+import {
+  getOptionalEnvValue,
+  getRequiredEnvValue,
+} from "@/server/lib/runtime-env";
 import type { ErrorCode } from "@/shared/error-codes";
 // Type-only: erased at compile, so no runtime cycle with envelope.ts (which
 // imports DataforseoErrorClassifier from here the same way).
@@ -8,7 +11,7 @@ import type {
   DataforseoTaskLike,
 } from "@/server/lib/dataforseo/envelope";
 
-const API_BASE = "https://api.dataforseo.com";
+const DEFAULT_API_BASE = "https://api.dataforseo.com";
 const MAX_DATAFORSEO_ERROR_PAYLOAD_LENGTH = 1600;
 // Safety ceiling on any live call (Lighthouse is the slowest, ~tens of seconds).
 const DATAFORSEO_REQUEST_TIMEOUT_MS = 60_000;
@@ -165,6 +168,18 @@ type DataforseoRequestOptions = {
   signal?: AbortSignal;
 };
 
+/**
+ * DataForSEO origin. `DATAFORSEO_BASE_URL` lets a deployment route calls
+ * through a proxy that speaks the same API; unset means DataForSEO itself.
+ */
+async function resolveApiBase(override?: string): Promise<string> {
+  const base =
+    override ??
+    (await getOptionalEnvValue("DATAFORSEO_BASE_URL")) ??
+    DEFAULT_API_BASE;
+  return base.replace(/\/+$/, "");
+}
+
 async function requestDataforseo<TTask extends DataforseoTaskLike>(
   method: "GET" | "POST",
   path: string,
@@ -175,15 +190,18 @@ async function requestDataforseo<TTask extends DataforseoTaskLike>(
     options.classify,
     options.maxServerErrorRetries,
   );
-  const response = await doFetch(`${options.baseUrl ?? API_BASE}${path}`, {
-    method,
-    headers: {
-      Accept: "application/json",
-      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+  const response = await doFetch(
+    `${await resolveApiBase(options.baseUrl)}${path}`,
+    {
+      method,
+      headers: {
+        Accept: "application/json",
+        ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      },
+      body: method === "POST" ? JSON.stringify(body) : undefined,
+      signal: options.signal,
     },
-    body: method === "POST" ? JSON.stringify(body) : undefined,
-    signal: options.signal,
-  });
+  );
   const text = await response.text();
   if (text === "") return null;
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the task type is the caller's claim about the payload; billing metadata and item fields are validated downstream (envelope.ts + section Zod schemas)
@@ -214,7 +232,7 @@ export function dataforseoPost<
  * gates its multi-MB body reads behind a parse lock in the audit worker, and
  * passes its own `signal` so the timeout can be cleared once headers arrive.
  */
-export function dataforseoPostResponse(
+export async function dataforseoPostResponse(
   path: string,
   tasks: unknown[],
   options: DataforseoRequestOptions & { signal?: AbortSignal } = {},
@@ -223,7 +241,7 @@ export function dataforseoPostResponse(
     options.classify,
     options.maxServerErrorRetries,
   );
-  return doFetch(`${API_BASE}${path}`, {
+  return doFetch(`${await resolveApiBase(options.baseUrl)}${path}`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(tasks),

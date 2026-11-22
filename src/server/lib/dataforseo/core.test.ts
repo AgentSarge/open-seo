@@ -1,16 +1,42 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { getOptionalEnvValueMock } = vi.hoisted(() => ({
+  getOptionalEnvValueMock:
+    vi.fn<(name: string) => Promise<string | undefined>>(),
+}));
 
 vi.mock("@/server/lib/runtime-env", () => ({
   getRequiredEnvValue: vi.fn(async () => "encoded-credentials"),
+  getOptionalEnvValue: getOptionalEnvValueMock,
 }));
 
 import { dataforseoPost } from "@/server/lib/dataforseo/core";
+
+beforeEach(() => {
+  getOptionalEnvValueMock.mockResolvedValue(undefined);
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("DataForSEO transport", () => {
+  it("sends requests to DATAFORSEO_BASE_URL when set", async () => {
+    getOptionalEnvValueMock.mockImplementation(async (name) =>
+      name === "DATAFORSEO_BASE_URL" ? "https://proxy.example.com/" : undefined,
+    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ status_code: 20000, tasks: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await dataforseoPost("/v3/backlinks/summary/live", []);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://proxy.example.com/v3/backlinks/summary/live",
+    );
+  });
+
   it("retries a transient 5xx on idempotent reads and returns the parsed envelope", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
